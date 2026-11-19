@@ -1,0 +1,265 @@
+import pygame
+from random import *
+
+#create a new pygame window
+pygame.init()
+
+#adding background music
+pygame.mixer.init()
+pygame.mixer.music.load("sounds/background_music.mp3")
+#-1 tells the music to loop
+pygame.mixer.music.play(-1)
+
+
+#setting up constants
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = int(SCREEN_WIDTH*0.8)
+FPS=60
+
+#create a game screen and set up a title
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+pygame.display.set_caption("OI WEEK - UFO INVADERS")
+
+#get the pygame clock to set the FPS
+clock = pygame.time.Clock()
+
+#setting up the background
+background_img = pygame.image.load("images/background.png")
+background_img = pygame.transform.scale(background_img, (SCREEN_WIDTH, SCREEN_HEIGHT))
+
+def draw_bg():
+    screen.blit(background_img, (0,0))
+
+#####################################################
+########         PLAYER CLASS                ########
+#####################################################
+
+class PlayerShip(pygame.sprite.Sprite):
+    #constructor - used to instantiate a new object from the class
+    def __init__(self, start_x, start_y):
+        #call the constructor of the parent class
+        pygame.sprite.Sprite.__init__(self)
+        img = pygame.image.load("images/player/0.bmp")
+        #create ship dimensions
+        self.image = pygame.transform.scale(img, (img.get_width()*1, img.get_height()*1))
+        self.speed = 5
+        self.health = 5
+        #this is used to determine which key the user has pressed
+        self.action = 0
+        self.alive = True
+        #rect is used when detecting collisions. each sprite has one rect (hitbox) and its size can be manipulated
+        self.rect = self.image.get_rect()
+        self.rect.center = (start_x, start_y)
+        #controlling how often the player can fire
+        self.fire = False
+        self.fire_cd = 10
+        self.can_fire = True
+        self.alive = True
+
+    def update(self):
+        if self.alive:
+            #if user pressed fire and not in cd
+            if self.fire and self.can_fire:
+                self.fire = False
+                self.can_fire = False
+                #now create an instance of a bullet
+                player_bullet = SpaceshipBullet(self.rect.centerx, self.rect.centery - 30, 0.5)
+                player_bullet_group.add(player_bullet)
+            elif not self.can_fire and self.fire_cd > 0:
+                #run during the cd
+                self.fire_cd -= 1
+            elif self.fire_cd <= 0:
+                #run when the cd is over
+                self.fire_cd = 10
+                self.can_fire = True
+
+
+    def move(self):
+        if self.alive:
+            #using next_x so can check do not leave screen before actually moving it
+            next_x = 0
+            if self.action == -1:
+                next_x -= self.speed
+            elif self.action == 1:
+                next_x += self.speed
+
+            #check if move will leave screen
+            if (self.rect.x + next_x) >= SCREEN_WIDTH - 32:
+                next_x = 0
+            elif (self.rect.x + next_x) <= 0:
+                next_x = 0
+
+            self.rect.x += next_x
+
+
+    def draw(self):
+        if self.alive:
+            screen.blit(self.image, self.rect)
+
+##############################################################
+########         PLAYER'S BULLET CLASS                ########
+##############################################################
+
+class SpaceshipBullet(pygame.sprite.Sprite):
+    #fetch the constructor, used to instantiate a new object from the class template
+    def __init__(self, start_x, start_y, scale):
+        #call constructor of parent class
+        pygame.sprite.Sprite.__init__(self)
+        img = pygame.image.load("images/player/pl_bullet.bmp")
+        self.image = pygame.transform.scale(img, (img.get_width() * scale, img.get_height() * scale*1))
+        self.rect = self.image.get_rect()
+        self.rect.center  = (start_x, start_y)
+        self.speed = 50
+        self.alive = True
+
+    def update(self):
+        self.move()
+
+    def move(self):
+        #subtracting from y coord makes bullet go up and vice versa
+        self.rect.y -= self.speed
+        if self.rect.y < 0:
+            self.alive = False
+            #deletes object from memory......
+            self.kill()
+
+    def draw(self):
+        if self.alive:
+            screen.blit(self.image, self.rect)
+
+##################################################
+########         UFO CLASS                ########
+##################################################
+
+class UFO(pygame.sprite.Sprite):
+    #constructor to instantiate a new object from class
+    def __init__(self, start_y, scale, speed):
+        #call constructor of parent class
+        pygame.sprite.Sprite.__init__(self)
+        self.speed = speed
+        #set direction to either -1 (backwards) or 1 (forwards)
+        self.direction = choice([-1, 1])
+        img = pygame.image.load("images/enemy/ufo_enemy.png")
+        inverted_img = pygame.image.load("images/enemy/ufo_enemy_inverted.png")
+        self.image = pygame.transform.scale(img, (64*scale, 32*scale))
+        self.inverted_image = pygame.transform.scale(inverted_img, (64*scale, 32*scale))
+        self.uninverted_image = pygame.transform.scale(img, (64*scale, 32*scale))
+        self.rect = self.image.get_rect()
+        self.rect.center = (randint(0,SCREEN_WIDTH-64), start_y)
+        self.alive = True
+        self.health = 2
+        self.hit_timer = 5
+        self.hit = False
+
+
+    def update(self):
+        if self.alive:
+            self.move()
+            #displaying the inverted image when hit
+            if self.hit and self.hit_timer > 0:
+                self.hit_timer -= 1
+                self.image = self.inverted_image
+            #checking when to go back to original image
+            elif self.hit and self.hit_timer <= 0:
+                #reset all
+                self.image = self.uninverted_image
+                self.hit = False
+                self.hit_timer = 5
+
+    def move(self):
+        if self.alive:
+            #check if the ufo has gone off the right side of the screen
+            if self.rect.centerx >= SCREEN_WIDTH:
+                self.direction = -1
+            #check if the ufo has gone off the left side of the screen
+            if self.rect.centerx <= 0:
+                self.direction = 1
+            #changing the ufo position
+            if self.direction == -1:
+                self.rect.x -= self.speed
+            else:
+                self.rect.x += self.speed
+
+    def draw(self):
+        if self.alive:
+            screen.blit(self.image, self.rect)
+
+def create_enemies(level_num):
+    #gets rid of ufo enemies
+    ufo_group.empty()
+    if level_num == 1:
+        #creating 3 UFOs and adding them into the UFO group
+        ufo_group.add(UFO(75, 1, 4), UFO(150, 1,3), UFO(225, 1, 5))
+
+
+#create a pygame group to handle all the bullet events
+player_bullet_group = pygame.sprite.Group()
+#create a pygame group to handle all the enemies
+ufo_group = pygame.sprite.Group()
+#create a new instance of the player class
+player_ship = PlayerShip(SCREEN_WIDTH/2, SCREEN_HEIGHT - 50)
+
+create_enemies(1)
+
+#main game loop
+game_over=False
+while not game_over:
+    clock.tick(FPS)
+    draw_bg()
+
+    ufo_group.update()
+    ufo_group.draw(screen)
+
+    player_bullet_group.update()
+    player_bullet_group.draw(screen)
+
+    player_ship.move()
+    player_ship.update()
+    player_ship.draw()
+
+    #detect collisions between player bullet and UFOs
+    #hits = all the UFO objects that have collided with a player bullet
+    #dokilla kills the first parameter, dokillb kills the second parameter
+    hits = pygame.sprite.groupcollide(ufo_group, player_bullet_group, False, True)
+    for hit_ufo in hits:
+        #adding UFO hit sound
+        pygame.mixer.Sound("sounds/enemy_hit.mp3").play()
+        hit_ufo.health -= 1
+        hit_ufo.hit = True
+        if hit_ufo.health <= 0:
+            hit_ufo.alive = False
+            hit_ufo.kill()
+
+    #check for user input
+    for event in pygame.event.get():
+        #checking if they click the red x button
+        if event.type == pygame.QUIT:
+            game_over=True
+        #checking if the user has pressed a key on the keyboard
+        if event.type == pygame.KEYDOWN:
+            #pressed the left arrow key
+            if event.key == pygame.K_LEFT:
+                player_ship.action = -1
+            #or the right arrow key
+            if event.key == pygame.K_RIGHT:
+                player_ship.action = 1
+
+            #fire a bullet
+            if event.key == pygame.K_SPACE:
+                player_ship.fire = True
+
+        if event.type == pygame.KEYUP:
+            # pressed the left arrow key
+            if event.key == pygame.K_LEFT:
+                player_ship.action = 0
+            # or the right arrow key
+            if event.key == pygame.K_RIGHT:
+                player_ship.action = 0
+
+    if not player_ship.alive:
+        game_over=True
+
+
+    pygame.display.update()
+
+pygame.quit()
